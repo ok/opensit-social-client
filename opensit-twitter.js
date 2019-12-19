@@ -57,7 +57,7 @@ request(
     }
 
     request(
-      'https://api-euwest.graphcms.com/v1/ck07yks3t0aad01cb1pnf3p23/master', session, { id: sessionId }
+      process.env.GRAPHCMS_ENDPOINT, session, { id: sessionId }
     ).then(
       data => { 
         const session = data.session;
