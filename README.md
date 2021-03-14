@@ -12,8 +12,9 @@ make sure your .env file contains the following variables
     TWITTER_ACCESS_TOKEN_KEY=
     TWITTER_ACCESS_TOKEN_SECRET=
 
-    // GraphCMS public API endpoint
+    // GraphCMS public API endpoint & auth token
     GRAPHCMS_ENDPOINT=
+    GRAPHCMS_AUTHTOKEN=
 
 
 ## Usage
