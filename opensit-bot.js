@@ -41,7 +41,8 @@ yargs.command({
   describe: 'initialise session repository',
   handler: function(argv) {
     console.log('init', argv)
-    sessions.getAllSessions()
+    const data = sessions.getAllSessions()
+    console.log(data)
   }
 })
 

@@ -1,6 +1,9 @@
 const { request } = require('graphql-request');
+const fs = require('fs')
 const aws = require("aws-sdk");
 const ddoc = require("dynamodb-doc");
+
+const fileName = 'sessions.json'
 
 // query ID of all sessions in GraphCMS
 // query a session by given SIT hashtag
@@ -25,7 +28,7 @@ const queryAllSessions = `query allSessions {
   }
 }`
 
-  
+   
 const getAllSessions = async() => {
   const data = await request(process.env.GRAPHCMS_ENDPOINT, queryAllSessions)
   return data
@@ -90,6 +93,22 @@ const update = function() {
   // read full list of sessions from CMS
   // update tweet state from local storage
   // write sessions state to local storage
+}
+
+const load = () => {
+  try {
+    const dataBuffer = fs.readFileSync(fileName)
+    const dataJSON = dataBuffer.toString()
+    return JSON.parse(dataJSON)
+  }
+  catch (e) {
+    return []
+  }
+}
+
+const save = (sessions) => {
+  const dataJSON = JSON.stringify(sessions)
+  fs.writeFileSync(fileName, dataJSON)
 }
 
 module.exports = {
