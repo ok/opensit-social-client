@@ -1,7 +1,7 @@
 {
   "name": "opensit-twitter-client",
-  "version": "1.0.0",
-  "description": "",
+  "version": "1.1.0",
+  "description": "A Twitter bot for OpenSIT",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -9,13 +9,10 @@
   "author": "Oliver Kohl",
   "license": "ISC",
   "dependencies": {
-    "aws-sdk": "^2.619.0",
     "commander": "^4.0.1",
     "dotenv": "^8.2.0",
-    "dynamodb-doc": "^1.0.0",
     "graphql": "^14.5.8",
     "graphql-request": "^1.8.2",
-    "twitter": "^1.7.1",
-    "yargs": "^15.1.0"
+    "twitter": "^1.7.1"
   }
 }

@@ -14,20 +14,37 @@ commander
   .parse(process.argv);
 
 async function main() {
+  
+  // which session should we post?
+  let sessionId;
+  if (commander.sessionid !== undefined) {
+    sessionId = commander.sessionid;
+  }
+  else {
+    // fetch the session IDs to tweet from our prepared list
+    let response = await fetch("https://opensit.net/sessions/tweet_sessions.json");
+    let json = await response.json()
+    
+    // calc access index (days since list created)
+    // let date2 = new Date(2023,1,19,0,0,0,0);
+    // console.log("date: " + date2.toDateString());
+    let index = getDaysSince(json.created_at, Date.now());
+    index %= json.sessions.length; // prevent overrun
+    sessionId = json.sessions[index].id;
+    
+    if (commander.debug) {
+      console.log("index: " + index);
+      console.log("session ID: " + sessionId);
+    }
+  }
+
+  // query session details from our headless CMS
   const graphQLClient = new GraphQLClient(process.env.GRAPHCMS_ENDPOINT, {
     headers: {
       authorization: 'Bearer '+process.env.GRAPHCMS_AUTHTOKEN,
     },
   })
-
-  // query ID of all sessions in GraphCMS
-  const queryAllSessions = `{
-    sessions {
-      id
-    }
-  }`
-
-  // query details of session with given ID in GraphCMS
+  
   const querySession = `query getSession($id: ID!) {
     session(where: {id: $id}) {
       id
@@ -47,26 +64,49 @@ async function main() {
       }
     }
   }`
-
-  const allSessions = await graphQLClient.request(queryAllSessions);
-  if (commander.debug) console.log(JSON.stringify(allSessions));
-
-  let sessionId;
-  // either use gived sessions ID
-  if (commander.sessionid !== undefined) {
-    sessionId = commander.sessionid;
-  }
-  else {
-  // or use a random 
-    const randomSession = Math.floor(Math.random() * allSessions.sessions.length);
-    sessionId = allSessions.sessions[randomSession].id;
-  }
-
   const data = await graphQLClient.request(querySession, { id: sessionId })
 
-  const session = data.session;
-  if (commander.debug) console.log(session);
+  // generate and post tweet
+  const tweetText = getTweetPost(data.session);
+  if (commander.tweet) postTweet(tweetText);
 
+  if (commander.debug) {
+    console.log("session data: " + JSON.stringify(data.session));
+    console.log("status text:\n" + tweetText);
+  }
+}
+
+// credits: https://stackoverflow.com/questions/542938
+function getDaysSince(firstDate, secondDate) {
+  // Take the difference between the dates and divide by milliseconds per day.
+  // Round to nearest whole number to deal with DST.
+  return Math.round((secondDate-firstDate)/(1000*60*60*24));
+}
+
+function getInsideTrackIdText(twitterId, hashtag) {
+  return (twitterId !== null && twitterId.length != 0) ? "@"+twitterId : "#"+hashtag;
+}
+
+function postTweet(post) {
+  var twitterClient = new Twitter({
+    consumer_key: process.env.TWITTER_CONSUMER_KEY,
+    consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
+    access_token_key: process.env.TWITTER_ACCESS_TOKEN_KEY,
+    access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET
+  });
+  
+  twitterClient.post('statuses/update', { status: post })
+  .then(function (tweet) {
+    console.log('tweet sent!\n');
+    console.log(tweet.text);
+    console.log(tweet.entities.hashtags);
+  })
+  .catch(function(error) {
+    throw error;
+  });
+}
+
+function getTweetPost(session) {
   const sessionDate = new Date(session.event.date);
   const insideTrack = getInsideTrackIdText(
     session.event.insideTrack.twitterId,
@@ -74,7 +114,7 @@ async function main() {
   );
   const speakers = getSpeakerId(session.speakers);
 
-  const tweetText = getTweetText(
+  return getTweetText(
     speakers,
     session.title,
     insideTrack,
@@ -82,30 +122,6 @@ async function main() {
     sessionDate.getFullYear(),
     session.topics
   )
-  console.log('status text:\n'+tweetText);
-
-  if (commander.tweet) {
-    var twitterClient = new Twitter({
-      consumer_key: process.env.TWITTER_CONSUMER_KEY,
-      consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
-      access_token_key: process.env.TWITTER_ACCESS_TOKEN_KEY,
-      access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET
-    });
-    
-    twitterClient.post('statuses/update', { status: tweetText })
-    .then(function (tweet) {
-      console.log('tweet sent!\n');
-      console.log(tweet.text);
-      console.log(tweet.entities.hashtags);
-    })
-    .catch(function(error) {
-      throw error;
-    });
-  }
-}
-
-function getInsideTrackIdText(twitterId, hashtag) {
-  return (twitterId !== null && twitterId.length != 0) ? "@"+twitterId : "#"+hashtag;
 }
 
 // input is an array of speaker objects,
