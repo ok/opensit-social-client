@@ -1,4 +1,4 @@
-const { GraphQLClient, gql } = require('graphql-request');
+const { GraphQLClient } = require('graphql-request');
 const commander = require('commander');
 const Twitter = require('twitter');
 
