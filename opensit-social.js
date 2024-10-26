@@ -4,6 +4,16 @@ const { TwitterApi } = require('twitter-api-v2');
 const WebSocket = require('ws');
 global.WebSocket = WebSocket;
 
+if (typeof CustomEvent !== 'function') {
+  global.CustomEvent = class CustomEvent extends Event {
+    constructor(event, params) {
+      params = params || { bubbles: false, cancelable: false, detail: null };
+      super(event, params);
+      this.detail = params.detail;
+    }
+  };
+}
+
 // check README.md for instructions how to setup .env file.
 require('dotenv').config();
 
