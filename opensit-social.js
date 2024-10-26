@@ -20,7 +20,7 @@ commander
   .version('1.0.0', '-v, --version')
   .usage('[OPTIONS]...')
   .option('-s, --sessionid <sessionid>', 'specify session ID to pull')
-  .option('-t, --tweet', 'send tweet')
+  .option('-p, --post', 'post note')
   .option('-d, --debug', 'log mode')
   .parse(process.argv);
 
@@ -33,7 +33,7 @@ async function main() {
       sessionId = commander.sessionid;
     }
     else {
-      // fetch the session IDs to tweet from our prepared list
+      // fetch the session IDs from our prepared list
       let response = await fetch("https://opensit.net/sessions/tweet_sessions.json");
       let json = await response.json()
       
@@ -77,17 +77,17 @@ async function main() {
     debugLog(data);
 
     // generate and post note
-    const noteContent = getTweetPost(data.session);
+    const noteContent = getNote(data.session);
     debugLog('Note content generated:', noteContent);
 
-    if (commander.tweet) {
+    if (commander.post) {
       debugLog('Attempting to post note');
       await postNote(noteContent);
       debugLog('Note posting completed');
     }
 
     if (commander.debug) {
-      debugLog('Tweet text:');
+      debugLog('Note text:');
       debugLog(noteContent);
     }
   } catch (error) {
@@ -115,10 +115,10 @@ function postTweet(post) {
 
   // twitterClient.post('statuses/update', { status: post })
   rwClient.v2.tweet({ post })
-  .then(function (tweet) {
-    console.log('tweet sent!\n');
-    console.log(tweet.text);
-    console.log(tweet.entities.hashtags);
+  .then(function (post) {
+    console.log('post sent!\n');
+    console.log(post.text);
+    console.log(post.entities.hashtags);
   })
   .catch(function(error) {
     throw error;
@@ -160,15 +160,15 @@ async function postNote(content) {
     await relay.close();
     debugLog('Relay connection closed');
 
-    debugLog('Note posted successfully!');
-    debugLog('Note text:', content);
+    console.log('Note posted successfully!');
+    console.log('Note text:', content);
   } catch (error) {
     console.error('Error posting note:', error);
     throw error;
   }
 }
 
-function getTweetPost(session) {
+function getNote(session) {
   const sessionDate = new Date(session.event.date);
   const insideTrack = getInsideTrackIdText(
     session.event.insideTrack.twitterId,
@@ -176,7 +176,7 @@ function getTweetPost(session) {
   );
   const speakers = getSpeakerId(session.speakers);
 
-  return getTweetText(
+  return getNoteText(
     speakers,
     session.title,
     insideTrack,
@@ -202,14 +202,14 @@ function getSpeakerId(speakers) {
   return speakerId;
 }
 
-// compose tweet text
-function getTweetText(speakers, title, insideTrack, hashtag, year, topics) {
+// compose note text
+function getNoteText(speakers, title, insideTrack, hashtag, year, topics) {
   const url = `https://opensit.net/${getSlug(hashtag)}/${year}/${ getSlug(title) }`;
-  var tweet =  "A session by "+speakers+" at "+insideTrack+" "+year+ ": "+title+" "+url;
+  var note =  "A session by "+speakers+" at "+insideTrack+" "+year+ ": "+title+" "+url;
   topics.forEach(topic => {
-    tweet += " #"+topic.replace(/_/g, '');
+    note += " #"+topic.replace(/_/g, '');
   });
-  return tweet;
+  return note;
 }
 
 // copy from helper.js
