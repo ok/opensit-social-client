@@ -1,9 +1,20 @@
 const { GraphQLClient } = require('graphql-request');
 const commander = require('commander');
-const Twitter = require('twitter');
+const { TwitterApi } = require('twitter-api-v2');
+const WebSocket = require('ws');
+global.WebSocket = WebSocket;
 
 // check README.md for instructions how to setup .env file.
 require('dotenv').config();
+
+const RELAY_URL = process.env.NOSTR_RELAY_URL || 'wss://relay.damus.io';
+const RELAY_WAIT_TIME = parseInt(process.env.NOSTR_RELAY_WAIT_TIME, 10) || 2000;
+
+function debugLog(...args) {
+  if (commander.debug) {
+    console.log('[DEBUG]', ...args);
+  }
+}
 
 commander
   .version('1.0.0', '-v, --version')
@@ -14,65 +25,73 @@ commander
   .parse(process.argv);
 
 async function main() {
-  
-  // which session should we post?
-  let sessionId;
-  if (commander.sessionid !== undefined) {
-    sessionId = commander.sessionid;
-  }
-  else {
-    // fetch the session IDs to tweet from our prepared list
-    let response = await fetch("https://opensit.net/sessions/tweet_sessions.json");
-    let json = await response.json()
-    
-    // calc access index (days since list created)
-    // let date2 = new Date(2023,1,19,0,0,0,0);
-    // console.log("date: " + date2.toDateString());
-    let index = getDaysSince(json.created_at, Date.now());
-    index %= json.sessions.length; // prevent overrun
-    sessionId = json.sessions[index].id;
-    
-    if (commander.debug) {
-      console.log("index: " + index);
-      console.log("session ID: " + sessionId);
+  try {
+    debugLog('Starting main function');
+    // which session should we post?
+    let sessionId;
+    if (commander.sessionid !== undefined) {
+      sessionId = commander.sessionid;
     }
-  }
+    else {
+      // fetch the session IDs to tweet from our prepared list
+      let response = await fetch("https://opensit.net/sessions/tweet_sessions.json");
+      let json = await response.json()
+      
+      // calc access index (days since list created)
+      // let date2 = new Date(2023,1,19,0,0,0,0);
+      // console.log("date: " + date2.toDateString());
+      let index = getDaysSince(json.created_at, Date.now());
+      index %= json.sessions.length; // prevent overrun
+      sessionId = json.sessions[index].id;
+    }
+      
+    debugLog("session ID:", sessionId);
 
-  // query session details from our headless CMS
-  const graphQLClient = new GraphQLClient(process.env.GRAPHCMS_ENDPOINT, {
-    headers: {
-      authorization: 'Bearer '+process.env.GRAPHCMS_AUTHTOKEN,
-    },
-  })
-  
-  const querySession = `query getSession($id: ID!) {
-    session(where: {id: $id}) {
-      id
-      title
-      speakers {
-        firstName
-        lastName
-        twitterId
-      }
-      topics
-      event {
-        date
-        insideTrack {
-          hashtag
+    // query session details from our headless CMS
+    const graphQLClient = new GraphQLClient(process.env.GRAPHCMS_ENDPOINT, {
+      headers: {
+        authorization: 'Bearer '+process.env.GRAPHCMS_AUTHTOKEN,
+      },
+    })
+    
+    const querySession = `query getSession($id: ID!) {
+      session(where: {id: $id}) {
+        id
+        title
+        speakers {
+          firstName
+          lastName
           twitterId
         }
+        topics
+        event {
+          date
+          insideTrack {
+            hashtag
+            twitterId
+          }
+        }
       }
+    }`
+    const data = await graphQLClient.request(querySession, { id: sessionId })
+    debugLog(data);
+
+    // generate and post note
+    const noteContent = getTweetPost(data.session);
+    debugLog('Note content generated:', noteContent);
+
+    if (commander.tweet) {
+      debugLog('Attempting to post note');
+      await postNote(noteContent);
+      debugLog('Note posting completed');
     }
-  }`
-  const data = await graphQLClient.request(querySession, { id: sessionId })
 
-  // generate and post tweet
-  const tweetText = getTweetPost(data.session);
-  if (commander.tweet) postTweet(tweetText);
-
-  if (commander.debug) {
-    console.log("session data: " + JSON.stringify(data.session));
-    console.log("status text:\n" + tweetText);
+    if (commander.debug) {
+      debugLog('Tweet text:');
+      debugLog(noteContent);
+    }
+  } catch (error) {
+    console.error('Error in main function:', error);
   }
 }
 
@@ -88,14 +107,14 @@ function getInsideTrackIdText(twitterId, hashtag) {
 }
 
 function postTweet(post) {
-  var twitterClient = new Twitter({
-    consumer_key: process.env.TWITTER_CONSUMER_KEY,
-    consumer_secret: process.env.TWITTER_CONSUMER_SECRET,
-    access_token_key: process.env.TWITTER_ACCESS_TOKEN_KEY,
-    access_token_secret: process.env.TWITTER_ACCESS_TOKEN_SECRET
-  });
-  
-  twitterClient.post('statuses/update', { status: post })
+  const twitterClient = new TwitterApi(process.env.TWITTER_BEARER_TOKEN);
+  debugLog(twitterClient);
+
+  const rwClient = twitterClient.readWrite;
+  debugLog(rwClient);
+
+  // twitterClient.post('statuses/update', { status: post })
+  rwClient.v2.tweet({ post })
   .then(function (tweet) {
     console.log('tweet sent!\n');
     console.log(tweet.text);
@@ -104,6 +123,49 @@ function postTweet(post) {
   .catch(function(error) {
     throw error;
   });
+}
+
+async function postNote(content) {
+  try {
+    debugLog('Starting postNote function');
+    const nostrify = await import('@nostrify/nostrify');
+    const signer = new nostrify.NSecSigner(process.env.NOSTR_NSEC);
+    const pubkey = await signer.getPublicKey();
+    debugLog('Public key:', pubkey);
+
+    const event = {
+      kind: 1,
+      pubkey: pubkey,
+      content: content,
+      created_at: Math.floor(Date.now() / 1000),
+      tags: []
+    };
+    debugLog('Event created:', event);
+
+    const signedEvent = await signer.signEvent(event);
+    debugLog('Event signed');
+
+    const relay = new nostrify.NRelay1(RELAY_URL);
+    debugLog('Relay created, URL:', RELAY_URL);
+
+    debugLog(`Waiting for ${RELAY_WAIT_TIME}ms before publishing`);
+    await new Promise(resolve => setTimeout(resolve, RELAY_WAIT_TIME));
+
+    const publishResult = await relay.event(signedEvent);
+    debugLog('Event published, result:', publishResult);
+
+    debugLog(`Waiting for ${RELAY_WAIT_TIME}ms after publishing`);
+    await new Promise(resolve => setTimeout(resolve, RELAY_WAIT_TIME));
+
+    await relay.close();
+    debugLog('Relay connection closed');
+
+    debugLog('Note posted successfully!');
+    debugLog('Note text:', content);
+  } catch (error) {
+    console.error('Error posting note:', error);
+    throw error;
+  }
 }
 
 function getTweetPost(session) {
@@ -155,7 +217,7 @@ function getSlug(title) {
   title = title.replace(/^\s+|\s+$/g, ''); // trim
   title = title.toLowerCase();
 
-  // remove accents, swap ñ for n, etc
+  // remove accents, swap  for n, etc
   var from = "ãàáäâẽèéëêìíïîõòóöôùúüûñç·/_,:;";
   var to   = "aaaaaeeeeeiiiiooooouuuunc------";
   for (var i=0, l=from.length ; i<l ; i++) {
@@ -169,4 +231,7 @@ function getSlug(title) {
   return title;
 }
 
-main();
+main().catch(error => {
+  console.error('Unhandled error in main:', error);
+  process.exit(1);
+});
