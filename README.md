@@ -6,8 +6,9 @@ Post a status update note to Nostr, promoting a random OpenSIT session.
 
 make sure your .env file contains the following variables
 
-    // Nostr private key
+    // Nostr private key and relay URL (default: wss://relay.damus.io)
     NOSTR_NSEC=
+    NOSTR_RELAY_URL=
 
     // GraphCMS public API endpoint & auth token
     GRAPHCMS_ENDPOINT=
