@@ -18,7 +18,7 @@ make sure your .env file contains the following variables
 
 type `node opensit-twitter.js -h`
 
-    Usage: opensit-twitter [OPTIONS]...
+    Usage: opensit-social [OPTIONS]...
 
     Options:
       -v, --version                output the version number
