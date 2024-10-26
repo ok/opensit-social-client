@@ -16,7 +16,7 @@ make sure your .env file contains the following variables
 
 ## Usage
 
-type `node opensit-twitter.js -h`
+type `node opensit-social.js -h`
 
     Usage: opensit-social [OPTIONS]...
 
