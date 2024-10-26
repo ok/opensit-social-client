@@ -1,4 +1,4 @@
-# OpenSIT Twitter Bot
+# OpenSIT Social Bot
 
 Post a status update note to Nostr, promoting a random OpenSIT session.
 
