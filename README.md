@@ -27,3 +27,5 @@ type `node opensit-social.js -h`
       -p, --post                   post note
       -d, --debug                  log mode
       -h, --help                   output usage information
+
+      -y, --letsgo                   yea
